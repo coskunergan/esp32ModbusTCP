@@ -80,6 +80,13 @@ class ModbusRequest03 : public ModbusRequest {
   size_t responseLength();
 };
 
+//forward data registers
+class forwardDataRequest : public ModbusRequest {
+ public:
+  explicit forwardDataRequest(uint8_t slaveAddress,uint8_t *data, uint8_t len);
+  size_t responseLength();
+};
+
 // read input registers
 class ModbusRequest04 : public ModbusRequest {
  public:

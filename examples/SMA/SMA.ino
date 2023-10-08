@@ -1,140 +1,150 @@
-/* esp32Modbus
-
-Copyright 2018 Bert Melis
-
-Permission is hereby granted, free of charge, to any person obtaining a
-copy of this software and associated documentation files (the
-"Software"), to deal in the Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish,
-distribute, sublicense, and/or sell copies of the Software, and to
-permit persons to whom the Software is furnished to do so, subject to
-the following conditions:
-
-The above copyright notice and this permission notice shall be included
-in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-
-
-/*
-
-The modbus server (= SMA Sunny Boy) is defined as
-ModbusTCP sunnyboy(3, {192, 168, 123, 123}, 502);
-where:
-- 3 = device ID
-- {192, 168, 123, 13} = device IP address
-- 502 = port number
-
-All defined registers are holding registers, 2 word size (4 bytes)
-
-*/
-
 
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp32ModbusTCP.h>
 
-const char* ssid = "xxxx";
-const char* pass = "xxxx";
+const char* ssid = "GTM_EUROPE_AP";
+const char* pass = "deneme123";
 bool WiFiConnected = false;
 
-esp32ModbusTCP sunnyboy(3, {192, 168, 123, 123}, 502);
-enum smaType {
-  ENUM,   // enumeration
-  UFIX0,  // unsigned, no decimals
-  SFIX0,  // signed, no decimals
+static uint8_t crcHiTable[] = {
+  0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81,
+  0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0,
+  0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01,
+  0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41,
+  0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81,
+  0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0,
+  0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01,
+  0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
+  0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81,
+  0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0,
+  0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01,
+  0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+  0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81,
+  0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0,
+  0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01,
+  0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+  0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81,
+  0x40
 };
-struct smaData {
-  const char* name;
-  uint16_t address;
-  uint16_t length;
-  smaType type;
-  uint16_t packetId;
+
+static uint8_t crcLoTable[] = {
+  0x00, 0xC0, 0xC1, 0x01, 0xC3, 0x03, 0x02, 0xC2, 0xC6, 0x06, 0x07, 0xC7, 0x05, 0xC5, 0xC4,
+  0x04, 0xCC, 0x0C, 0x0D, 0xCD, 0x0F, 0xCF, 0xCE, 0x0E, 0x0A, 0xCA, 0xCB, 0x0B, 0xC9, 0x09,
+  0x08, 0xC8, 0xD8, 0x18, 0x19, 0xD9, 0x1B, 0xDB, 0xDA, 0x1A, 0x1E, 0xDE, 0xDF, 0x1F, 0xDD,
+  0x1D, 0x1C, 0xDC, 0x14, 0xD4, 0xD5, 0x15, 0xD7, 0x17, 0x16, 0xD6, 0xD2, 0x12, 0x13, 0xD3,
+  0x11, 0xD1, 0xD0, 0x10, 0xF0, 0x30, 0x31, 0xF1, 0x33, 0xF3, 0xF2, 0x32, 0x36, 0xF6, 0xF7,
+  0x37, 0xF5, 0x35, 0x34, 0xF4, 0x3C, 0xFC, 0xFD, 0x3D, 0xFF, 0x3F, 0x3E, 0xFE, 0xFA, 0x3A,
+  0x3B, 0xFB, 0x39, 0xF9, 0xF8, 0x38, 0x28, 0xE8, 0xE9, 0x29, 0xEB, 0x2B, 0x2A, 0xEA, 0xEE,
+  0x2E, 0x2F, 0xEF, 0x2D, 0xED, 0xEC, 0x2C, 0xE4, 0x24, 0x25, 0xE5, 0x27, 0xE7, 0xE6, 0x26,
+  0x22, 0xE2, 0xE3, 0x23, 0xE1, 0x21, 0x20, 0xE0, 0xA0, 0x60, 0x61, 0xA1, 0x63, 0xA3, 0xA2,
+  0x62, 0x66, 0xA6, 0xA7, 0x67, 0xA5, 0x65, 0x64, 0xA4, 0x6C, 0xAC, 0xAD, 0x6D, 0xAF, 0x6F,
+  0x6E, 0xAE, 0xAA, 0x6A, 0x6B, 0xAB, 0x69, 0xA9, 0xA8, 0x68, 0x78, 0xB8, 0xB9, 0x79, 0xBB,
+  0x7B, 0x7A, 0xBA, 0xBE, 0x7E, 0x7F, 0xBF, 0x7D, 0xBD, 0xBC, 0x7C, 0xB4, 0x74, 0x75, 0xB5,
+  0x77, 0xB7, 0xB6, 0x76, 0x72, 0xB2, 0xB3, 0x73, 0xB1, 0x71, 0x70, 0xB0, 0x50, 0x90, 0x91,
+  0x51, 0x93, 0x53, 0x52, 0x92, 0x96, 0x56, 0x57, 0x97, 0x55, 0x95, 0x94, 0x54, 0x9C, 0x5C,
+  0x5D, 0x9D, 0x5F, 0x9F, 0x9E, 0x5E, 0x5A, 0x9A, 0x9B, 0x5B, 0x99, 0x59, 0x58, 0x98, 0x88,
+  0x48, 0x49, 0x89, 0x4B, 0x8B, 0x8A, 0x4A, 0x4E, 0x8E, 0x8F, 0x4F, 0x8D, 0x4D, 0x4C, 0x8C,
+  0x44, 0x84, 0x85, 0x45, 0x87, 0x47, 0x46, 0x86, 0x82, 0x42, 0x43, 0x83, 0x41, 0x81, 0x80,
+  0x40
 };
-smaData smaRegisters[] = {
-  "status", 30201, 2, ENUM, 0,
-  "connectionstatus", 30217, 2, ENUM, 0,
-  "totalpower", 30529, 2, UFIX0, 0,
-  "currentpower", 30775, 2, SFIX0, 0,
-  "currentdc1power", 30773, 2, SFIX0, 0,
-  "currentdc2power", 30961, 2, SFIX0, 0
-};
-uint8_t numberSmaRegisters = sizeof(smaRegisters) / sizeof(smaRegisters[0]);
-uint8_t currentSmaRegister = 0;
 
+uint16_t CRC16(uint8_t* msg, size_t len) {
+  uint8_t crcHi = 0xFF;
+  uint8_t crcLo = 0xFF;
+  uint8_t index;
 
-void setup() {
-    Serial.begin(115200);
-    WiFi.disconnect(true);  // delete old config
-
-    sunnyboy.onData([](uint16_t packet, uint8_t slave, esp32Modbus::FunctionCode fc , uint8_t* data , uint16_t len) {
-      for (uint8_t i = 0; i < numberSmaRegisters; ++i) {
-        if (smaRegisters[i].packetId == packet) {
-          smaRegisters[i].packetId = 0;
-          switch (smaRegisters[i].type) {
-          case ENUM:
-          case UFIX0:
-            {
-            uint32_t value = 0;
-            value = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | (data[3]);
-            Serial.printf("%s: %u\n", smaRegisters[i].name, value);
-            break;
-            }
-          case SFIX0:
-            {
-            int32_t value = 0;
-            value = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | (data[3]);
-            Serial.printf("%s: %i\n", smaRegisters[i].name, value);
-            break;
-            }
-          }
-          return;
-        }
-      }
-    });
-    sunnyboy.onError([](uint16_t packet, esp32Modbus::Error e) {
-      Serial.printf("Error packet %u: %02x\n", packet, e);
-    });
-
-    delay(1000);
-
-    WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
-      Serial.print("WiFi connected. IP: ");
-      Serial.println(IPAddress(info.got_ip.ip_info.ip.addr));
-      WiFiConnected = true;
-    }, WiFiEvent_t::SYSTEM_EVENT_STA_GOT_IP);
-    WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info){
-        Serial.print("WiFi lost connection. Reason: ");
-        Serial.println(info.disconnected.reason);
-        WiFi.disconnect();
-        WiFiConnected = false;
-    }, WiFiEvent_t::SYSTEM_EVENT_STA_DISCONNECTED);
-
-    WiFi.begin(ssid, pass);
-
-    Serial.println();
-    Serial.println("Connecting to WiFi... ");
+  while (len--) {
+    index = crcLo ^ *msg++;
+    crcLo = crcHi ^ crcHiTable[index];
+    crcHi = crcLoTable[index];
+  }
+  return (crcHi << 8 | crcLo);
 }
 
+esp32ModbusTCP mbt(1, { 192, 168, 4, 2 }, 50200);
+
+void setup() {
+
+  Serial.begin(9600);
+
+  WiFi.disconnect(true);  // delete old config
+
+  mbt.onData([](uint16_t packet, uint8_t slave, esp32Modbus::FunctionCode fc, uint8_t* data, uint16_t len) {
+    if (len == 0) {
+      len += 3;
+    }
+    len += 3;
+    uint16_t crc = CRC16(data, len);
+    Serial.write(data, len);
+    Serial.write((uint8_t)(crc & 0xFF));
+    Serial.write((uint8_t)((crc >> 8) & 0xFF));
+  });
+  mbt.onError([](uint16_t packet, esp32Modbus::Error e) {
+    //Serial.printf("Error packet %u: %02x\n", packet, e);
+  });
+
+  delay(1000);
+
+  WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
+    Serial.print("WiFi connected. IP: ");
+    Serial.println(IPAddress(info.got_ip.ip_info.ip.addr));
+    WiFiConnected = true;
+  },
+               WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_GOT_IP);
+  WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
+    //Serial.print("WiFi lost connection. Reason: ");
+    // Serial.println(info.disconnected.reason);
+    WiFi.disconnect();
+    WiFiConnected = false;
+  },
+               WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+
+  //WiFi.begin(ssid, pass);
+
+  WiFi.softAP(ssid, pass);
+
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(IP);    
+
+  delay(2000);
+}
+
+uint8_t buffer[255];
+uint8_t i = 0;
+
 void loop() {
-  static uint32_t lastMillis = 0;
-  if ((millis() - lastMillis > 30000 && WiFiConnected)) {
-    lastMillis = millis();
-    Serial.print("reading registers\n");
-    for (uint8_t i = 0; i < numberSmaRegisters; ++i) {
-      uint16_t packetId = sunnyboy.readHoldingRegisters(smaRegisters[i].address, smaRegisters[i].length);
-      if (packetId > 0) {
-        smaRegisters[i].packetId = packetId;
-      } else {
-        Serial.print("reading error\n");
-      }
+  //static uint32_t lastMillis = 0;
+  // if ((millis() - lastMillis > 3000 && WiFiConnected)) {
+  //   lastMillis = millis();
+  //   Serial.print("reading registers\n");
+  //   for (uint8_t i = 0; i < numberSmaRegisters; ++i) {
+  //     uint16_t packetId = sunnyboy.readHoldingRegisters(smaRegisters[i].address, smaRegisters[i].length);
+  //     if (packetId > 0) {
+  //       smaRegisters[i].packetId = packetId;
+  //     } else {
+  //       Serial.print("reading error\n");
+  //     }
+  //   }
+  // }
+
+  if (Serial.available() > 0) {    
+    i = 0;
+    delay(100);
+    do {
+      buffer[i++] = Serial.read();
+    } while (Serial.available());
+    i-=2;
+    uint16_t crc = CRC16(buffer, i);
+    if(((crc & 0xFF)==buffer[i]) &&
+    (((crc>>8) & 0xFF)==buffer[i+1]))
+    {
+      mbt.forwardData(buffer, i);
+    }
+    else
+    {
+      Serial.println("CRC hatali...");
     }
   }
 }

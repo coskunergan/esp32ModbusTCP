@@ -147,6 +147,38 @@ size_t ModbusRequest03::responseLength() {
   return 9 + _byteCount;
 }
 
+forwardDataRequest::forwardDataRequest(uint8_t slaveAddress, uint8_t *data, uint8_t len) :
+  ModbusRequest(6 + len) {
+  _slaveAddress = slaveAddress;
+  _functionCode = data[1];
+  switch(_functionCode)
+  {
+	  case 0x5://WRITE_COIL
+	  case 0x6://WRITE_HOLD_REGISTER:
+	  case 0x0F://WRITE_MULT_COILS:
+	  case 0x10://WRITE_MULT_REGISTERS:
+		_byteCount = 3;
+	  break;
+	  default:
+		_byteCount = (((uint16_t)data[4]<< 8) | data[5]) * 2;
+	  break;
+  }
+  add(high(_packetId));
+  add(low(_packetId));
+  add(0x00);
+  add(0x00);
+  add(0x00);
+  add(len);
+  for(uint8_t i=0; i<len; i++)
+  {
+	add(*data++);
+  }	  
+}
+
+size_t forwardDataRequest::responseLength() {	
+	return 9 + _byteCount;
+}
+
 ModbusRequest04::ModbusRequest04(uint8_t slaveAddress, uint16_t address, uint16_t numberRegisters) :
   ModbusRequest(12) {
   _slaveAddress = slaveAddress;
@@ -206,7 +238,7 @@ esp32Modbus::FunctionCode ModbusResponse::getFunctionCode() {
 }
 
 uint8_t* ModbusResponse::getData() {
-  return &_buffer[9];
+  return &_buffer[6];//9
 }
 
 size_t ModbusResponse::getByteCount() {

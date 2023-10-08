@@ -51,6 +51,7 @@ class esp32ModbusTCP {
   void onError(esp32Modbus::MBTCPOnError handler);
   uint16_t readDiscreteInputs(uint16_t address, uint16_t numberInputs);
   uint16_t readHoldingRegisters(uint16_t address, uint16_t numberRegisters);
+  uint16_t forwardData(uint8_t *data, uint8_t len);
   uint16_t readInputRegisters(uint16_t address, uint16_t numberRegisters);
 
  private:

@@ -76,6 +76,12 @@ uint16_t esp32ModbusTCP::readHoldingRegisters(uint16_t address, uint16_t numberR
   return _addToQueue(request);
 }
 
+uint16_t esp32ModbusTCP::forwardData(uint8_t *data, uint8_t len) {
+  esp32ModbusTCPInternals::ModbusRequest* request =
+    new esp32ModbusTCPInternals::forwardDataRequest(_serverID, data, len);
+  return _addToQueue(request);
+}
+
 uint16_t esp32ModbusTCP::readInputRegisters(uint16_t address, uint16_t numberRegisters) {
   esp32ModbusTCPInternals::ModbusRequest* request =
     new esp32ModbusTCPInternals::ModbusRequest04(_serverID, address, numberRegisters);
